@@ -578,8 +578,8 @@
               </select>
               <select class="form-control" style="width:150px;padding:6px 10px;" id="filter-type" onchange="renderAll()">
                 <option value="">ประเภทงานทั้งหมด</option>
-                <option>Electrical</option>
                 <option>Automation</option>
+                <option>Electrical</option>
                 <option>Software</option>
                 <option>Installation</option>
                 <option>Maintenance</option>
@@ -710,6 +710,27 @@
   </div><!-- /content -->
 </main>
 
+<!-- ========== MODAL: Re-authenticate before Clear All ========== -->
+<div id="modal-reauth" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #991b1b;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#ef4444" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <span style="font-size:16px;font-weight:700;color:#fca5a5;">ยืนยันตัวตนก่อนลบข้อมูล</span>
+    </div>
+    <p style="color:#94a3b8;font-size:13px;margin-bottom:16px;line-height:1.6;">การดำเนินการนี้จะ<strong style="color:#ef4444;">ลบข้อมูลทั้งหมด</strong>อย่างถาวร<br>กรุณากรอกรหัสผ่านของคุณเพื่อยืนยัน</p>
+    <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;">รหัสผ่าน</label>
+    <input type="password" id="reauth-password" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+      style="width:100%;padding:10px 12px;background:#0f172a;border:1px solid #475569;border-radius:8px;color:#f1f5f9;font-size:14px;box-sizing:border-box;outline:none;"
+      placeholder="กรอกรหัสผ่านของคุณ"
+      onkeydown="if(event.key==='Enter')confirmClearAllData()">
+    <div id="reauth-error" style="color:#ef4444;font-size:12px;min-height:18px;margin-top:6px;"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button onclick="cancelClearAllData()" style="flex:1;padding:10px;background:#334155;color:#cbd5e1;border:none;border-radius:8px;cursor:pointer;font-size:13px;">ยกเลิก</button>
+      <button onclick="confirmClearAllData()" style="flex:1;padding:10px;background:#991b1b;color:#fca5a5;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">ลบข้อมูลทั้งหมด</button>
+    </div>
+  </div>
+</div>
+
 <!-- ========== MODAL: New Project ========== -->
 <div class="modal-overlay" id="modal-project">
   <div class="modal">
@@ -726,8 +747,8 @@
         <div class="form-group">
           <label class="form-label">ประเภทงาน</label>
           <select class="form-control" id="p-type">
-            <option>Electrical</option>
             <option>Automation</option>
+            <option>Electrical</option>
             <option>Software</option>
             <option>Installation</option>
             <option>Maintenance</option>
@@ -1022,9 +1043,39 @@ function fbDeleteProject(id) { return db.collection('projects').doc(String(id)).
 function fbDeleteTask(id)    { return db.collection('tasks').doc(String(id)).delete(); }
 function fbDeleteMember(id)  { return db.collection('members').doc(String(id)).delete(); }
 
-async function clearAllData() {
-  if (!confirm('⚠️ ต้องการล้างข้อมูลทั้งหมดใช่ไหม?\n\nโปรเจกต์, งาน, สมาชิก จะถูกลบทั้งหมด\nการดำเนินการนี้ไม่สามารถย้อนกลับได้')) return;
-  if (!confirm('ยืนยันอีกครั้ง — ลบข้อมูลทั้งหมดจริงๆ ใช่ไหม?')) return;
+function clearAllData() {
+  // Show password re-auth modal instead of confirm dialog
+  const modal = document.getElementById('modal-reauth');
+  const pwInput = document.getElementById('reauth-password');
+  const errEl = document.getElementById('reauth-error');
+  pwInput.value = '';
+  errEl.textContent = '';
+  modal.style.display = 'flex';
+  setTimeout(() => pwInput.focus(), 100);
+}
+
+async function confirmClearAllData() {
+  const pwInput = document.getElementById('reauth-password');
+  const errEl = document.getElementById('reauth-error');
+  const password = pwInput.value;
+  if (!password) { errEl.textContent = 'กรุณากรอกรหัสผ่านก่อนครับ'; return; }
+
+  const user = auth.currentUser;
+  if (!user) { errEl.textContent = 'ไม่พบข้อมูลผู้ใช้ กรุณาล็อกอินใหม่'; return; }
+
+  try {
+    const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
+    await user.reauthenticateWithCredential(credential);
+  } catch(e) {
+    pwInput.value = '';
+    errEl.textContent = 'รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่ครับ';
+    return;
+  }
+
+  // Password verified — close modal and delete
+  document.getElementById('modal-reauth').style.display = 'none';
+  pwInput.value = '';
+
   try {
     const cols = ['projects','tasks','members','meta'];
     for (const col of cols) {
@@ -1039,6 +1090,13 @@ async function clearAllData() {
   }
 }
 
+function cancelClearAllData() {
+  const pwInput = document.getElementById('reauth-password');
+  pwInput.value = '';
+  document.getElementById('reauth-error').textContent = '';
+  document.getElementById('modal-reauth').style.display = 'none';
+}
+
 
 // ============================================================
 // HELPERS
@@ -1051,8 +1109,8 @@ const statusColors = {
   'ยกเลิก': 'badge-danger',
 };
 const typeColors = {
-  'Electrical': '#f59e0b',
   'Automation': '#3b82f6',
+  'Electrical': '#f59e0b',
   'Software': '#8b5cf6',
   'Installation': '#10b981',
   'Maintenance': '#64748b',
@@ -1495,7 +1553,7 @@ function openNewProjectModal() {
   });
   document.getElementById('p-progress').value = '0';
   document.getElementById('p-status').value = 'วางแผน';
-  document.getElementById('p-type').value = 'Electrical';
+  document.getElementById('p-type').value = 'Automation';
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('p-start').value = today;
   document.getElementById('p-end').value = '';
@@ -1522,7 +1580,7 @@ function editProject(id) {
   document.getElementById('p-progress').value = p.progress||0;
   document.getElementById('p-owner').value = p.owner||'';
   document.getElementById('p-note').value = p.note||'';
-  document.getElementById('p-type').value = p.type||'Electrical';
+  document.getElementById('p-type').value = p.type||'Automation';
   openModal('modal-project');
 }
 

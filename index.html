@@ -975,19 +975,28 @@ function doLogout() {
 
 // ---- FIRESTORE LISTENERS ----
 function startFirestoreListeners() {
-  let seeded = false;
-  unsubProjects = db.collection('projects').onSnapshot(snap => {
-    projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (projects.length === 0 && !seeded) { seeded = true; seedData(); }
-    else renderAll();
-  });
-  unsubTasks = db.collection('tasks').onSnapshot(snap => {
-    tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderAll();
-  });
-  unsubMembers = db.collection('members').onSnapshot(snap => {
-    members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderAll();
+  // ตรวจสอบ meta doc ก่อน — seed ได้ครั้งเดียวตลอดการใช้งาน
+  db.collection('meta').doc('init').get().then(metaDoc => {
+    const alreadyInit = metaDoc.exists;
+
+    unsubProjects = db.collection('projects').onSnapshot(snap => {
+      projects = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+      if (!alreadyInit && projects.length === 0) {
+        // ครั้งแรกเท่านั้น — บันทึก flag แล้ว seed
+        db.collection('meta').doc('init').set({ seeded: true, at: new Date().toISOString() });
+        seedData();
+      } else {
+        renderAll();
+      }
+    });
+    unsubTasks = db.collection('tasks').onSnapshot(snap => {
+      tasks = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+      renderAll();
+    });
+    unsubMembers = db.collection('members').onSnapshot(snap => {
+      members = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+      renderAll();
+    });
   });
 }
 
@@ -1017,46 +1026,41 @@ function fbDeleteProject(id) { return db.collection('projects').doc(String(id)).
 function fbDeleteTask(id)    { return db.collection('tasks').doc(String(id)).delete(); }
 function fbDeleteMember(id)  { return db.collection('members').doc(String(id)).delete(); }
 
-// Legacy saveAll — used only for seeding initial data
-function saveAll() {
-  projects.forEach(p => fbSaveProject(p));
-  tasks.forEach(t => fbSaveTask(t));
-  members.forEach(m => fbSaveMember(m));
-}
-
-// Seed demo data if Firestore is empty (first-time setup)
+// Seed demo data if Firestore is empty (first-time setup only)
 function seedData() {
   const today = new Date();
   const fmt = (d) => d.toISOString().split('T')[0];
   const add = (days) => { let d=new Date(today); d.setDate(d.getDate()+days); return fmt(d); };
+  // ใช้ add() โดยตรงกับ Firestore — ไม่มี id field เพื่อให้ Firestore สร้าง ID เอง
+  const batch = db.batch();
 
-  projects = [
-    { id:1, code:'APY-2026-001', name:'ติดตั้งระบบ PLC Siemens S7-1500 สายการผลิต Line 3', client:'บริษัท ABC Manufacturing จำกัด', contact:'คุณสมชาย เทคโน', type:'Automation', budget:1850000, cost:1200000, start:add(-45), end:add(30), status:'กำลังดำเนินการ', progress:65, owner:'วีรศักดิ์ ช.', note:'ติดตั้ง PLC + HMI + ระบบ SCADA สำหรับสายการผลิตบรรจุภัณฑ์', paymentStatus:'รับแล้วบางส่วน' },
-    { id:2, code:'APY-2026-002', name:'ออกแบบและติดตั้ง MDB ตู้ไฟฟ้าหลัก อาคารโรงงาน', client:'บริษัท XYZ Industries จำกัด', contact:'คุณปริยา วิศว์', type:'Electrical', budget:980000, cost:650000, start:add(-20), end:add(60), status:'กำลังดำเนินการ', progress:30, owner:'สมภพ ส.', note:'ออกแบบ MDB, SDB, ตู้ Motor Control Center สำหรับโรงงานใหม่', paymentStatus:'ยังไม่รับ' },
-    { id:3, code:'APY-2026-003', name:'Retrofit ระบบ Drive Inverter VFD สายพานลำเลียง', client:'โรงงาน DEF Plastic Co., Ltd.', contact:'คุณธนา อุตส.', type:'Automation', budget:450000, cost:280000, start:add(-60), end:add(-5), status:'เสร็จสมบูรณ์', progress:100, owner:'วีรศักดิ์ ช.', note:'เปลี่ยน Inverter เก่าเป็น Mitsubishi FR-E800 จำนวน 12 ตัว', paymentStatus:'รับครบ' },
-    { id:4, code:'APY-2026-004', name:'Software SCADA System สำหรับโรงงานน้ำดื่ม', client:'บริษัท Pure Water Production จำกัด', contact:'คุณนิรันดร์ ผลิต', type:'Software', budget:320000, cost:150000, start:add(-10), end:add(45), status:'วางแผน', progress:10, owner:'ประสิทธิ์ พ.', note:'พัฒนา SCADA monitoring กระบวนการผลิตน้ำดื่ม RO+UV', paymentStatus:'ยังไม่รับ' },
-    { id:5, code:'APY-2026-005', name:'จัดหาและส่งมอบ Sensor+IO Module ปลีก', client:'บริษัท Multi Tech Solution จำกัด', contact:'คุณภัทรา ขาย', type:'Product Supply', budget:185000, cost:120000, start:add(-5), end:add(15), status:'รอลูกค้า', progress:50, owner:'Joe', note:'จัดหา Proximity Sensor + IO Module Siemens ET200SP', paymentStatus:'รับแล้วบางส่วน' },
-    { id:6, code:'APY-2025-045', name:'PM ประจำปี ระบบ Automation โรงงานปูนซีเมนต์', client:'โรงงาน TH Cement', contact:'คุณชัยวุฒิ วิศว', type:'Maintenance', budget:280000, cost:160000, start:add(-90), end:add(-30), status:'เสร็จสมบูรณ์', progress:100, owner:'สมภพ ส.', note:'Preventive Maintenance ระบบ PLC, HMI, ตู้ควบคุม ครบ 32 จุด', paymentStatus:'รับครบ' },
+  // เซฟตรงไปยัง Firestore โดยไม่มี id field — Firestore จะสร้าง ID ให้เอง
+  const seedProjects = [
+    { code:'APY-2026-001', name:'ติดตั้งระบบ PLC Siemens S7-1500 สายการผลิต Line 3', client:'บริษัท ABC Manufacturing จำกัด', contact:'คุณสมชาย เทคโน', type:'Automation', budget:1850000, cost:1200000, start:add(-45), end:add(30), status:'กำลังดำเนินการ', progress:65, owner:'วีรศักดิ์ ช.', note:'ติดตั้ง PLC + HMI + ระบบ SCADA สำหรับสายการผลิตบรรจุภัณฑ์', paymentStatus:'รับแล้วบางส่วน' },
+    { code:'APY-2026-002', name:'ออกแบบและติดตั้ง MDB ตู้ไฟฟ้าหลัก อาคารโรงงาน', client:'บริษัท XYZ Industries จำกัด', contact:'คุณปริยา วิศว์', type:'Electrical', budget:980000, cost:650000, start:add(-20), end:add(60), status:'กำลังดำเนินการ', progress:30, owner:'สมภพ ส.', note:'ออกแบบ MDB, SDB, ตู้ Motor Control Center สำหรับโรงงานใหม่', paymentStatus:'ยังไม่รับ' },
+    { code:'APY-2026-003', name:'Retrofit ระบบ Drive Inverter VFD สายพานลำเลียง', client:'โรงงาน DEF Plastic Co., Ltd.', contact:'คุณธนา อุตส.', type:'Automation', budget:450000, cost:280000, start:add(-60), end:add(-5), status:'เสร็จสมบูรณ์', progress:100, owner:'วีรศักดิ์ ช.', note:'เปลี่ยน Inverter เก่าเป็น Mitsubishi FR-E800 จำนวน 12 ตัว', paymentStatus:'รับครบ' },
+    { code:'APY-2026-004', name:'Software SCADA System สำหรับโรงงานน้ำดื่ม', client:'บริษัท Pure Water Production จำกัด', contact:'คุณนิรันดร์ ผลิต', type:'Software', budget:320000, cost:150000, start:add(-10), end:add(45), status:'วางแผน', progress:10, owner:'ประสิทธิ์ พ.', note:'พัฒนา SCADA monitoring กระบวนการผลิตน้ำดื่ม RO+UV', paymentStatus:'ยังไม่รับ' },
+    { code:'APY-2026-005', name:'จัดหาและส่งมอบ Sensor+IO Module ปลีก', client:'บริษัท Multi Tech Solution จำกัด', contact:'คุณภัทรา ขาย', type:'Product Supply', budget:185000, cost:120000, start:add(-5), end:add(15), status:'รอลูกค้า', progress:50, owner:'Joe', note:'จัดหา Proximity Sensor + IO Module Siemens ET200SP', paymentStatus:'รับแล้วบางส่วน' },
+    { code:'APY-2025-045', name:'PM ประจำปี ระบบ Automation โรงงานปูนซีเมนต์', client:'โรงงาน TH Cement', contact:'คุณชัยวุฒิ วิศว', type:'Maintenance', budget:280000, cost:160000, start:add(-90), end:add(-30), status:'เสร็จสมบูรณ์', progress:100, owner:'สมภพ ส.', note:'Preventive Maintenance ระบบ PLC, HMI, ตู้ควบคุม ครบ 32 จุด', paymentStatus:'รับครบ' },
   ];
-
-  tasks = [
-    { id:1, name:'ตรวจสอบ Wiring Diagram ก่อนติดตั้ง', project:1, assignee:'วีรศักดิ์ ช.', priority:'สูง', due: add(5), done:false },
-    { id:2, name:'Programming PLC Siemens S7-1500', project:1, assignee:'ประสิทธิ์ พ.', priority:'สูง', due: add(12), done:false },
-    { id:3, name:'สั่งซื้อ HMI Panel Siemens TP1200', project:1, assignee:'Joe', priority:'กลาง', due: add(3), done:true },
-    { id:4, name:'ออกแบบ Single Line Diagram MDB', project:2, assignee:'สมภพ ส.', priority:'สูง', due: add(7), done:false },
-    { id:5, name:'ส่งใบเสนอราคา SCADA License', project:4, assignee:'Joe', priority:'กลาง', due: add(2), done:false },
-    { id:6, name:'ยืนยัน Spec Sensor กับลูกค้า', project:5, assignee:'Joe', priority:'สูง', due: add(-2), done:false },
+  const seedTasks = [
+    { name:'ตรวจสอบ Wiring Diagram ก่อนติดตั้ง', assignee:'วีรศักดิ์ ช.', priority:'สูง', due: add(5), done:false },
+    { name:'Programming PLC Siemens S7-1500', assignee:'ประสิทธิ์ พ.', priority:'สูง', due: add(12), done:false },
+    { name:'สั่งซื้อ HMI Panel Siemens TP1200', assignee:'Joe', priority:'กลาง', due: add(3), done:true },
+    { name:'ออกแบบ Single Line Diagram MDB', assignee:'สมภพ ส.', priority:'สูง', due: add(7), done:false },
+    { name:'ส่งใบเสนอราคา SCADA License', assignee:'Joe', priority:'กลาง', due: add(2), done:false },
+    { name:'ยืนยัน Spec Sensor กับลูกค้า', assignee:'Joe', priority:'สูง', due: add(-2), done:false },
   ];
-
-  members = [
-    { id:1, name:'Joe (ภรณ์ชัย)', role:'MD / Owner', phone:'081-234-5678', email:'joe@apy.co.th', color:'#1a3c6e', projects:3 },
-    { id:2, name:'วีรศักดิ์ ชาญวิชัย', role:'วิศวกร Automation', phone:'086-111-2222', email:'veerasak@apy.co.th', color:'#2563eb', projects:2 },
-    { id:3, name:'สมภพ สุขเจริญ', role:'วิศวกรไฟฟ้า', phone:'087-333-4444', email:'sompob@apy.co.th', color:'#059669', projects:2 },
-    { id:4, name:'ประสิทธิ์ พัฒนชัย', role:'โปรแกรมเมอร์ PLC', phone:'089-555-6666', email:'prasit@apy.co.th', color:'#7c3aed', projects:1 },
-    { id:5, name:'กมลรัตน์ สวัสดี', role:'ธุรการ / บัญชี', phone:'082-777-8888', email:'admin@apy.co.th', color:'#dc2626', projects:0 },
+  const seedMembers = [
+    { name:'Joe (ภรณ์ชัย)', role:'MD / Owner', phone:'081-234-5678', email:'joe@apy.co.th', color:'#1a3c6e' },
+    { name:'วีรศักดิ์ ชาญวิชัย', role:'วิศวกร Automation', phone:'086-111-2222', email:'veerasak@apy.co.th', color:'#2563eb' },
+    { name:'สมภพ สุขเจริญ', role:'วิศวกรไฟฟ้า', phone:'087-333-4444', email:'sompob@apy.co.th', color:'#059669' },
+    { name:'ประสิทธิ์ พัฒนชัย', role:'โปรแกรมเมอร์ PLC', phone:'089-555-6666', email:'prasit@apy.co.th', color:'#7c3aed' },
+    { name:'กมลรัตน์ สวัสดี', role:'ธุรการ / บัญชี', phone:'082-777-8888', email:'admin@apy.co.th', color:'#dc2626' },
   ];
-
-  saveAll(); // seeds Firestore collections
+  seedProjects.forEach(p => db.collection('projects').add(p));
+  seedTasks.forEach(t => db.collection('tasks').add(t));
+  seedMembers.forEach(m => db.collection('members').add(m));
 }
 
 // ============================================================

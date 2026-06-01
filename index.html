@@ -600,6 +600,7 @@
                     <th>ประเภท</th>
                     <th>งบประมาณ</th>
                     <th>สถานะ</th>
+                    <th>การเก็บเงิน</th>
                     <th>ความคืบหน้า</th>
                     <th>กำหนดส่ง</th>
                     <th>ผู้รับผิดชอบ</th>
@@ -807,6 +808,18 @@
           <label class="form-label">ความคืบหน้า (%)</label>
           <input class="form-control" id="p-progress" type="number" min="0" max="100" placeholder="0">
         </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">สถานะการเก็บเงิน</label>
+          <select class="form-control" id="p-payment">
+            <option>ยังไม่เก็บ</option>
+            <option>เก็บบางส่วน</option>
+            <option>เก็บครบแล้ว</option>
+            <option>ค้างชำระ</option>
+          </select>
+        </div>
+        <div class="form-group"></div>
       </div>
       <div class="form-group">
         <label class="form-label">ผู้รับผิดชอบหลัก</label>
@@ -1108,6 +1121,12 @@ const statusColors = {
   'เสร็จสมบูรณ์': 'badge-success',
   'ยกเลิก': 'badge-danger',
 };
+const paymentColors = {
+  'ยังไม่เก็บ':   { bg: '#1e293b', color: '#94a3b8', border: '#334155' },
+  'เก็บบางส่วน': { bg: '#1e3a5f', color: '#60a5fa', border: '#2563eb' },
+  'เก็บครบแล้ว': { bg: '#14532d', color: '#4ade80', border: '#16a34a' },
+  'ค้างชำระ':    { bg: '#450a0a', color: '#f87171', border: '#dc2626' },
+};
 const typeColors = {
   'Automation': '#3b82f6',
   'Electrical': '#f59e0b',
@@ -1318,7 +1337,7 @@ function renderProjectsList() {
     (!statusF || p.status === statusF) && (!typeF || p.type === typeF)
   );
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-muted);">ไม่พบโปรเจกต์</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">ไม่พบโปรเจกต์</td></tr>';
     return;
   }
   tbody.innerHTML = filtered.map(p => `
@@ -1329,6 +1348,7 @@ function renderProjectsList() {
       <td><span class="type-badge" style="background:${typeColors[p.type]||'#94a3b8'}22;color:${typeColors[p.type]||'#94a3b8'};border:1px solid ${typeColors[p.type]||'#94a3b8'}44;">${p.type}</span></td>
       <td style="font-weight:700;">${fmtMoney(p.budget)}</td>
       <td><span class="badge ${statusColors[p.status]||'badge-gray'}">${p.status}</span></td>
+      <td>${(()=>{ const pc=paymentColors[p.payment||'ยังไม่เก็บ']||paymentColors['ยังไม่เก็บ']; return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${pc.bg};color:${pc.color};border:1px solid ${pc.border};">${p.payment||'ยังไม่เก็บ'}</span>`; })()}</td>
       <td style="min-width:90px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:${p.progress}%;background:${progressColor(p.progress)};"></div></div>
@@ -1553,6 +1573,7 @@ function openNewProjectModal() {
   });
   document.getElementById('p-progress').value = '0';
   document.getElementById('p-status').value = 'วางแผน';
+  document.getElementById('p-payment').value = 'ยังไม่เก็บ';
   document.getElementById('p-type').value = 'Automation';
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('p-start').value = today;
@@ -1577,6 +1598,7 @@ function editProject(id) {
   document.getElementById('p-start').value = p.start||'';
   document.getElementById('p-end').value = p.end||'';
   document.getElementById('p-status').value = p.status||'วางแผน';
+  document.getElementById('p-payment').value = p.payment||'ยังไม่เก็บ';
   document.getElementById('p-progress').value = p.progress||0;
   document.getElementById('p-owner').value = p.owner||'';
   document.getElementById('p-note').value = p.note||'';
@@ -1597,10 +1619,10 @@ function saveProject() {
     start: document.getElementById('p-start').value,
     end: document.getElementById('p-end').value,
     status: document.getElementById('p-status').value,
+    payment: document.getElementById('p-payment').value,
     progress: parseInt(document.getElementById('p-progress').value) || 0,
     owner: document.getElementById('p-owner').value.trim(),
     note: document.getElementById('p-note').value.trim(),
-    paymentStatus: 'ยังไม่รับ',
   };
   if (editingProjectId) {
     const idx = projects.findIndex(p => p.id === editingProjectId);

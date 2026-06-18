@@ -515,13 +515,20 @@
           </div>
         </div>
 
-        <!-- Project type pie-style -->
+        <!-- Project type breakdown -->
         <div class="card">
           <div class="card-header">
             <span class="card-title">🏭 ประเภทงาน</span>
           </div>
-          <div class="card-body" id="type-breakdown">
-            <!-- filled by JS -->
+          <div class="card-body" style="display:flex;gap:20px;align-items:flex-start;">
+            <!-- Left: horizontal bars by count -->
+            <div id="type-breakdown" style="flex:1;min-width:0;"></div>
+            <!-- Right: donut chart by budget -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:10px;min-width:150px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.5px;">มูลค่างาน</div>
+              <canvas id="donut-chart" width="140" height="140"></canvas>
+              <div id="donut-legend" style="display:flex;flex-direction:column;gap:4px;width:100%;"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1254,21 +1261,71 @@ function renderDashboard() {
   if (Object.keys(typeCounts).length === 0) {
     typeEl.innerHTML = '<div class="empty-state"><p>ยังไม่มีข้อมูล</p></div>';
   } else {
+    const maxCount = Math.max(...Object.values(typeCounts), 1);
     typeEl.innerHTML = Object.entries(typeCounts).map(([t,c]) =>
-      `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:10px;height:10px;border-radius:50%;background:${typeColors[t]||'#64748b'}"></div>
-          <span style="font-size:13px;font-weight:600;">${t}</span>
+      `<div style="margin-bottom:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:10px;height:10px;border-radius:50%;background:${typeColors[t]||'#64748b'};flex-shrink:0;"></div>
+            <span style="font-size:12px;font-weight:600;">${t}</span>
+          </div>
+          <span style="font-size:12px;font-weight:700;color:var(--text-muted);">${c} งาน</span>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <span style="font-size:12px;color:var(--text-muted);">${c} งาน</span>
-          <span style="font-size:12px;font-weight:700;">${fmtMoney(typeBudgets[t])}</span>
+        <div style="background:#1e293b;border-radius:4px;height:10px;overflow:hidden;">
+          <div style="height:100%;width:${Math.round((c/maxCount)*100)}%;background:${typeColors[t]||'#64748b'};border-radius:4px;transition:width 0.6s ease;"></div>
         </div>
-      </div>
-      <div class="progress-bar" style="margin-bottom:8px;">
-        <div class="progress-fill" style="width:${Math.round((c/total)*100)}%;background:${typeColors[t]||'#64748b'};"></div>
       </div>`
     ).join('');
+  }
+
+  // Donut chart (Canvas)
+  const canvas = document.getElementById('donut-chart');
+  const legendEl = document.getElementById('donut-legend');
+  if (canvas && legendEl) {
+    const ctx = canvas.getContext('2d');
+    const entries = Object.entries(typeBudgets).filter(([,v]) => v > 0);
+    const totalBudgetType = entries.reduce((s,[,v]) => s+v, 0);
+    ctx.clearRect(0, 0, 140, 140);
+    if (entries.length === 0) {
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath(); ctx.arc(70, 70, 55, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#334155';
+      ctx.beginPath(); ctx.arc(70, 70, 35, 0, Math.PI*2); ctx.fill();
+    } else {
+      let startAngle = -Math.PI / 2;
+      entries.forEach(([t, v]) => {
+        const slice = (v / totalBudgetType) * Math.PI * 2;
+        const color = typeColors[t] || '#64748b';
+        ctx.beginPath();
+        ctx.moveTo(70, 70);
+        ctx.arc(70, 70, 60, startAngle, startAngle + slice);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        startAngle += slice;
+      });
+      // Hole
+      ctx.beginPath(); ctx.arc(70, 70, 36, 0, Math.PI*2);
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || '#1e2d3d';
+      ctx.fill();
+      // Center text
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(fmtMoney(totalBudgetType), 70, 70);
+    }
+    // Legend
+    legendEl.innerHTML = entries.map(([t,v]) => {
+      const pct = totalBudgetType > 0 ? Math.round((v/totalBudgetType)*100) : 0;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+        <div style="display:flex;align-items:center;gap:4px;min-width:0;">
+          <div style="width:8px;height:8px;border-radius:50%;background:${typeColors[t]||'#64748b'};flex-shrink:0;"></div>
+          <span style="font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t}</span>
+        </div>
+        <span style="font-size:10px;font-weight:700;white-space:nowrap;">${pct}%</span>
+      </div>`;
+    }).join('');
   }
 
   // Recent table

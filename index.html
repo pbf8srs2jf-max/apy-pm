@@ -516,18 +516,23 @@
         </div>
 
         <!-- Project type breakdown -->
-        <div class="card">
+        <div class="card" style="grid-column: span 2;">
           <div class="card-header">
             <span class="card-title">🏭 ประเภทงาน</span>
           </div>
-          <div class="card-body" style="display:flex;gap:20px;align-items:flex-start;">
+          <div class="card-body" style="display:flex;gap:32px;align-items:stretch;">
             <!-- Left: horizontal bars by count -->
-            <div id="type-breakdown" style="flex:1;min-width:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:14px;letter-spacing:.5px;text-transform:uppercase;">จำนวนงาน</div>
+              <div id="type-breakdown"></div>
+            </div>
+            <!-- Divider -->
+            <div style="width:1px;background:#334155;flex-shrink:0;"></div>
             <!-- Right: donut chart by budget -->
-            <div style="display:flex;flex-direction:column;align-items:center;gap:10px;min-width:150px;">
-              <div style="font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.5px;">มูลค่างาน</div>
-              <canvas id="donut-chart" width="140" height="140"></canvas>
-              <div id="donut-legend" style="display:flex;flex-direction:column;gap:4px;width:100%;"></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:14px;min-width:220px;">
+              <div style="font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;">มูลค่างาน</div>
+              <canvas id="donut-chart" width="200" height="200"></canvas>
+              <div id="donut-legend" style="display:flex;flex-direction:column;gap:7px;width:100%;"></div>
             </div>
           </div>
         </div>
@@ -1263,67 +1268,84 @@ function renderDashboard() {
   } else {
     const maxCount = Math.max(...Object.values(typeCounts), 1);
     typeEl.innerHTML = Object.entries(typeCounts).map(([t,c]) =>
-      `<div style="margin-bottom:10px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <div style="width:10px;height:10px;border-radius:50%;background:${typeColors[t]||'#64748b'};flex-shrink:0;"></div>
-            <span style="font-size:12px;font-weight:600;">${t}</span>
+      `<div style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:13px;height:13px;border-radius:50%;background:${typeColors[t]||'#64748b'};flex-shrink:0;"></div>
+            <span style="font-size:14px;font-weight:600;">${t}</span>
           </div>
-          <span style="font-size:12px;font-weight:700;color:var(--text-muted);">${c} งาน</span>
+          <span style="font-size:14px;font-weight:800;color:${typeColors[t]||'#64748b'};">${c} งาน</span>
         </div>
-        <div style="background:#1e293b;border-radius:4px;height:10px;overflow:hidden;">
-          <div style="height:100%;width:${Math.round((c/maxCount)*100)}%;background:${typeColors[t]||'#64748b'};border-radius:4px;transition:width 0.6s ease;"></div>
+        <div style="background:#1e293b;border-radius:6px;height:14px;overflow:hidden;">
+          <div style="height:100%;width:${Math.round((c/maxCount)*100)}%;background:${typeColors[t]||'#64748b'};border-radius:6px;transition:width 0.7s ease;box-shadow:0 0 6px ${typeColors[t]||'#64748b'}66;"></div>
         </div>
       </div>`
     ).join('');
   }
 
-  // Donut chart (Canvas)
+  // Donut chart (Canvas 200×200)
   const canvas = document.getElementById('donut-chart');
   const legendEl = document.getElementById('donut-legend');
   if (canvas && legendEl) {
+    const dpr = window.devicePixelRatio || 1;
+    const size = 200;
+    canvas.width  = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width  = size + 'px';
+    canvas.style.height = size + 'px';
     const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const cx = size / 2, cy = size / 2;
+    const outerR = 88, innerR = 52;
+
     const entries = Object.entries(typeBudgets).filter(([,v]) => v > 0);
     const totalBudgetType = entries.reduce((s,[,v]) => s+v, 0);
-    ctx.clearRect(0, 0, 140, 140);
+    ctx.clearRect(0, 0, size, size);
+
     if (entries.length === 0) {
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath(); ctx.arc(70, 70, 55, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#334155';
-      ctx.beginPath(); ctx.arc(70, 70, 35, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, Math.PI*2);
+      ctx.fillStyle = '#1e293b'; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, innerR, 0, Math.PI*2);
+      ctx.fillStyle = '#0f172a'; ctx.fill();
     } else {
       let startAngle = -Math.PI / 2;
+      const gap = 0.025;
       entries.forEach(([t, v]) => {
-        const slice = (v / totalBudgetType) * Math.PI * 2;
+        const slice = (v / totalBudgetType) * Math.PI * 2 - gap;
         const color = typeColors[t] || '#64748b';
         ctx.beginPath();
-        ctx.moveTo(70, 70);
-        ctx.arc(70, 70, 60, startAngle, startAngle + slice);
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, outerR, startAngle, startAngle + slice);
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.fill();
-        startAngle += slice;
+        startAngle += slice + gap;
       });
       // Hole
-      ctx.beginPath(); ctx.arc(70, 70, 36, 0, Math.PI*2);
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || '#1e2d3d';
-      ctx.fill();
-      // Center text
+      ctx.beginPath(); ctx.arc(cx, cy, innerR, 0, Math.PI*2);
+      ctx.fillStyle = '#0f172a'; ctx.fill();
+      // Center: label + total
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 12px sans-serif';
+      ctx.fillText('มูลค่ารวม', cx, cy - 11);
       ctx.fillStyle = '#f1f5f9';
-      ctx.font = 'bold 10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(fmtMoney(totalBudgetType), 70, 70);
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText(fmtMoney(totalBudgetType), cx, cy + 10);
     }
-    // Legend
+
+    // Legend: dot + name + value + %
     legendEl.innerHTML = entries.map(([t,v]) => {
       const pct = totalBudgetType > 0 ? Math.round((v/totalBudgetType)*100) : 0;
-      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-        <div style="display:flex;align-items:center;gap:4px;min-width:0;">
-          <div style="width:8px;height:8px;border-radius:50%;background:${typeColors[t]||'#64748b'};flex-shrink:0;"></div>
-          <span style="font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t}</span>
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="display:flex;align-items:center;gap:7px;min-width:0;">
+          <div style="width:11px;height:11px;border-radius:50%;background:${typeColors[t]||'#64748b'};flex-shrink:0;"></div>
+          <span style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t}</span>
         </div>
-        <span style="font-size:10px;font-weight:700;white-space:nowrap;">${pct}%</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span style="font-size:12px;color:var(--text-muted);">${fmtMoney(v)}</span>
+          <span style="font-size:12px;font-weight:800;color:${typeColors[t]||'#64748b'};min-width:32px;text-align:right;">${pct}%</span>
+        </div>
       </div>`;
     }).join('');
   }
